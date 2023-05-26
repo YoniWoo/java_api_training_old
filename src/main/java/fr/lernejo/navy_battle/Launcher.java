@@ -17,13 +17,16 @@ import java.util.concurrent.Executors;
 
 public class Launcher {
     private static final int THREAD_POOL_SIZE = 1;
+
     public static void main(String[] args) throws IOException, InterruptedException {
         int port = Integer.parseInt(args[0]);
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/ping", new PingHandler());
         server.createContext("/api/game/start", new StartGameHandler());
+        server.createContext("/api/game/fire", new FireHandler());
         server.setExecutor(Executors.newFixedThreadPool(THREAD_POOL_SIZE));
         server.start();
+
         if (args.length >= 2) {
             String adversaryUrl = args[1];
             JSONObject requestJson = new JSONObject();
@@ -55,18 +58,21 @@ public class Launcher {
             }
         }
     }
+
     private static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
         exchange.sendResponseHeaders(statusCode, response.getBytes().length);
         OutputStream outputStream = exchange.getResponseBody();
         outputStream.write(response.getBytes());
         outputStream.close();
     }
+
     private static class PingHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             sendResponse(exchange, 200, "OK");
         }
     }
+
     private static class StartGameHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -74,10 +80,10 @@ public class Launcher {
                 sendResponse(exchange, 405, "Method Not Allowed");
                 return;
             }
+
             try {
                 JSONObject requestBody = new JSONObject(new JSONTokener(exchange.getRequestBody()));
                 String id = requestBody.getString("id");
-                String url = requestBody.getString("url");
                 String message = requestBody.getString("message");
                 JSONObject responseJson = new JSONObject();
                 responseJson.put("id", id);
@@ -87,6 +93,29 @@ public class Launcher {
             } catch (Exception e) {
                 sendResponse(exchange, 400, "Bad Request");
             }
+        }
+    }
+
+    private static class FireHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                sendResponse(exchange, 405, "Method Not Allowed");
+                return;
+            }
+
+            String cell = exchange.getRequestURI().getQuery();
+            if (cell == null || cell.isEmpty()) {
+                sendResponse(exchange, 400, "Bad Request");
+                return;
+            }
+
+            // Votre logique de traitement du tir sur la cellule spécifiée (variable `cell`) ici
+
+            JSONObject responseJson = new JSONObject();
+            responseJson.put("consequence", "sunk");
+            responseJson.put("shipLeft", true);
+            sendResponse(exchange, 200, responseJson.toString());
         }
     }
 }
