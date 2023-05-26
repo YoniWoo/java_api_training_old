@@ -17,7 +17,6 @@ import java.util.concurrent.Executors;
 
 public class Launcher {
     private static final int THREAD_POOL_SIZE = 1;
-
     public static void main(String[] args) throws IOException, InterruptedException {
         int port = Integer.parseInt(args[0]);
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -26,53 +25,62 @@ public class Launcher {
         server.createContext("/api/game/fire", new FireHandler());
         server.setExecutor(Executors.newFixedThreadPool(THREAD_POOL_SIZE));
         server.start();
-
         if (args.length >= 2) {
             String adversaryUrl = args[1];
-            JSONObject requestJson = new JSONObject();
-            requestJson.put("id", "1");
-            requestJson.put("url", "http://localhost:" + port);
-            requestJson.put("message", "hello");
+            JSONObject requestJson = createRequestJson(port);
             HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(adversaryUrl + "/api/game/start"))
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(requestJson.toString()))
-                .build();
+            HttpRequest request = createHttpRequest(adversaryUrl, requestJson);
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            int statusCode = response.statusCode();
-            if (statusCode == 202) {
-                JSONObject responseJson = new JSONObject(response.body());
-                String id = responseJson.getString("id");
-                String url = responseJson.getString("url");
-                String message = responseJson.getString("message");
-                if (!url.equals("http://localhost:" + port)) {
-                    System.out.println("Unexpected server URL in response: " + url);
-                }
-                System.out.println("ID: " + id);
-                System.out.println("Server URL: " + url);
-                System.out.println("Message: " + message);
-            } else {
-                System.out.println("Unexpected response status: " + statusCode);
-            }
+            handleGameStartResponse(response, port);
         }
     }
-
+    private static JSONObject createRequestJson(int port) {
+        JSONObject requestJson = new JSONObject();
+        requestJson.put("id", "1");
+        requestJson.put("url", "http://localhost:" + port);
+        requestJson.put("message", "hello");
+        return requestJson;
+    }
+    private static HttpRequest createHttpRequest(String adversaryUrl, JSONObject requestJson) {
+        return HttpRequest.newBuilder()
+            .uri(URI.create(adversaryUrl + "/api/game/start"))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(requestJson.toString()))
+            .build();
+    }
+    private static void handleGameStartResponse(HttpResponse<String> response, int port) {
+        int statusCode = response.statusCode();
+        if (statusCode == 202) {
+            JSONObject responseJson = new JSONObject(response.body());
+            String id = responseJson.getString("id");
+            String url = responseJson.getString("url");
+            String message = responseJson.getString("message");
+            printGameStartResponse(id, url, message, port);
+        } else {
+            System.out.println("Unexpected response status: " + statusCode);
+        }
+    }
+    private static void printGameStartResponse(String id, String url, String message, int port) {
+        if (!url.equals("http://localhost:" + port)) {
+            System.out.println("Unexpected server URL in response: " + url);
+        }
+        System.out.println("ID: " + id);
+        System.out.println("Server URL: " + url);
+        System.out.println("Message: " + message);
+    }
     private static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
         exchange.sendResponseHeaders(statusCode, response.getBytes().length);
         OutputStream outputStream = exchange.getResponseBody();
         outputStream.write(response.getBytes());
         outputStream.close();
     }
-
     private static class PingHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             sendResponse(exchange, 200, "OK");
         }
     }
-
     private static class StartGameHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -80,22 +88,24 @@ public class Launcher {
                 sendResponse(exchange, 405, "Method Not Allowed");
                 return;
             }
-
             try {
                 JSONObject requestBody = new JSONObject(new JSONTokener(exchange.getRequestBody()));
                 String id = requestBody.getString("id");
                 String message = requestBody.getString("message");
-                JSONObject responseJson = new JSONObject();
-                responseJson.put("id", id);
-                responseJson.put("url", "http://localhost:" + exchange.getLocalAddress().getPort());
-                responseJson.put("message", message);
+                JSONObject responseJson = createGameStartResponseJson(exchange, id, message);
                 sendResponse(exchange, 202, responseJson.toString());
             } catch (Exception e) {
                 sendResponse(exchange, 400, "Bad Request");
             }
         }
+        private JSONObject createGameStartResponseJson(HttpExchange exchange, String id, String message) {
+            JSONObject responseJson = new JSONObject();
+            responseJson.put("id", id);
+            responseJson.put("url", "http://localhost:" + exchange.getLocalAddress().getPort());
+            responseJson.put("message", message);
+            return responseJson;
+        }
     }
-
     private static class FireHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -103,19 +113,22 @@ public class Launcher {
                 sendResponse(exchange, 405, "Method Not Allowed");
                 return;
             }
-
             String cell = exchange.getRequestURI().getQuery();
             if (cell == null || cell.isEmpty()) {
                 sendResponse(exchange, 400, "Bad Request");
                 return;
             }
-
-            // Votre logique de traitement du tir sur la cellule spécifiée (variable `cell`) ici
-
+            handleFireRequest(exchange, cell);
+        }
+        private void handleFireRequest(HttpExchange exchange, String cell) throws IOException {
+            JSONObject responseJson = createFireResponseJson();
+            sendResponse(exchange, 200, responseJson.toString());
+        }
+        private JSONObject createFireResponseJson() {
             JSONObject responseJson = new JSONObject();
             responseJson.put("consequence", "sunk");
             responseJson.put("shipLeft", true);
-            sendResponse(exchange, 200, responseJson.toString());
+            return responseJson;
         }
     }
 }
