@@ -29,7 +29,7 @@ public class Launcher {
             String adversaryUrl = args[1];
             JSONObject requestJson = RequestHelper.createRequestJson(port);
             HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = RequestHelper.createHttpRequest(adversaryUrl, requestJson);
+            HttpRequest request = RequestHelper.createHttpRequest(adversaryUrl, "/api/game/start", requestJson);
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             ResponseHelper.handleGameStartResponse(response, port);
         }
@@ -45,9 +45,9 @@ class RequestHelper {
         return requestJson;
     }
 
-    public static HttpRequest createHttpRequest(String adversaryUrl, JSONObject requestJson) {
+    public static HttpRequest createHttpRequest(String baseUrl, String endpoint, JSONObject requestJson) {
         return HttpRequest.newBuilder()
-            .uri(URI.create(adversaryUrl + "/api/game/start"))
+            .uri(URI.create(baseUrl + endpoint))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestJson.toString()))
@@ -78,7 +78,8 @@ class ResponseHelper {
         System.out.println("Message: " + message);
     }
 
-    public static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+    public static void sendResponse(HttpExchange exchange, int statusCode, String contentType, String response) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.sendResponseHeaders(statusCode, response.getBytes().length);
         OutputStream outputStream = exchange.getResponseBody();
         outputStream.write(response.getBytes());
@@ -89,7 +90,7 @@ class ResponseHelper {
 class PingHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        ResponseHelper.sendResponse(exchange, 200, "OK");
+        ResponseHelper.sendResponse(exchange, 200, "text/plain", "OK");
     }
 }
 
@@ -97,7 +98,7 @@ class StartGameHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) {
-            ResponseHelper.sendResponse(exchange, 405, "Method Not Allowed");
+            ResponseHelper.sendResponse(exchange, 405, "text/plain", "Method Not Allowed");
             return;
         }
         try {
@@ -105,9 +106,9 @@ class StartGameHandler implements HttpHandler {
             String id = requestBody.getString("id");
             String message = requestBody.getString("message");
             JSONObject responseJson = createGameStartResponseJson(exchange, id, message);
-            ResponseHelper.sendResponse(exchange, 202, responseJson.toString());
+            ResponseHelper.sendResponse(exchange, 202, "application/json", responseJson.toString());
         } catch (Exception e) {
-            ResponseHelper.sendResponse(exchange, 400, "Bad Request");
+            ResponseHelper.sendResponse(exchange, 400, "text/plain", "Bad Request");
         }
     }
 
@@ -124,12 +125,12 @@ class FireHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-            ResponseHelper.sendResponse(exchange, 405, "Method Not Allowed");
+            ResponseHelper.sendResponse(exchange, 405, "text/plain", "Method Not Allowed");
             return;
         }
         String cell = exchange.getRequestURI().getQuery();
         if (cell == null || cell.isEmpty()) {
-            ResponseHelper.sendResponse(exchange, 400, "Bad Request");
+            ResponseHelper.sendResponse(exchange, 400, "text/plain", "Bad Request");
             return;
         }
         handleFireRequest(exchange, cell);
@@ -137,7 +138,7 @@ class FireHandler implements HttpHandler {
 
     private void handleFireRequest(HttpExchange exchange, String cell) throws IOException {
         JSONObject responseJson = createFireResponseJson();
-        ResponseHelper.sendResponse(exchange, 200, responseJson.toString());
+        ResponseHelper.sendResponse(exchange, 200, "application/json", responseJson.toString());
     }
 
     private JSONObject createFireResponseJson() {
